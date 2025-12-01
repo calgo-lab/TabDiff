@@ -1,3 +1,6 @@
+
+# See [README_fork.md](README_fork.md) for notes about this fork.
+
 # TabDiff: a Mixed-type Diffusion Model for Tabular Data Generation
 
 <p align="center">

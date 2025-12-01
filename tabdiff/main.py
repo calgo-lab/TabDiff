@@ -3,13 +3,14 @@ import json
 import os
 import pickle
 import random
+from pathlib import Path
 
 import numpy as np
-from tabdiff.metrics import TabMetrics
-from tabdiff.modules.main_modules import UniModMLP
-from tabdiff.modules.main_modules import Model
-from tabdiff.models.unified_ctime_diffusion import UnifiedCtimeDiffusion
-from tabdiff.trainer import Trainer
+from synthius.TabDiff.tabdiff.metrics import TabMetrics
+from synthius.TabDiff.tabdiff.modules.main_modules import UniModMLP
+from synthius.TabDiff.tabdiff.modules.main_modules import Model
+from synthius.TabDiff.tabdiff.models.unified_ctime_diffusion import UnifiedCtimeDiffusion
+from synthius.TabDiff.tabdiff.trainer import Trainer
 import src
 import torch
 
@@ -25,6 +26,8 @@ from utils_train import TabDiffDataset
 
 warnings.filterwarnings('ignore')
 
+BASE_PATH = Path.home() / "projects/Synthius/TabDiff"
+
 
 def main(args):
     device = args.device
@@ -35,8 +38,8 @@ def main(args):
 
     ## Get data info
     dataname = args.dataname
-    data_dir = f'data/{dataname}'
-    info_path = f'data/{dataname}/info.json'
+    data_dir = BASE_PATH / "data" / dataname
+    info_path = data_dir / "info.json"
     with open(info_path, 'r') as f:
         info = json.load(f)
     
@@ -135,9 +138,9 @@ def main(args):
     val_data = TabDiffDataset(dataname, data_dir, info, y_only=args.y_only, isTrain=False, dequant_dist=raw_config['data']['dequant_dist'], int_dequant_factor=raw_config['data']['int_dequant_factor'])
 
     ## Load Metrics
-    real_data_path = f'synthetic/{dataname}/real.csv'
-    test_data_path = f'synthetic/{dataname}/test.csv'
-    val_data_path = f'synthetic/{dataname}/val.csv'
+    real_data_path = BASE_PATH / f'synthetic/{dataname}/real.csv'
+    test_data_path = BASE_PATH / f'synthetic/{dataname}/test.csv'
+    val_data_path = BASE_PATH / f'synthetic/{dataname}/val.csv'
     if not os.path.exists(val_data_path):
         print(f"{args.dataname} does not have its validation set. During MLE evaluation, a validation set will be splitted from the training set!")
         val_data_path = None
@@ -168,7 +171,7 @@ def main(args):
             main_model_path = main_model_path_arr[0]
         main_model_configs = pickle.load(open(os.path.join(os.path.dirname(main_model_path), 'config.pkl'), 'rb'))
         if main_model_configs['diffusion_params']['scheduler'] == "power_mean_per_column": # if learnable schedule is enabled in the main model, we need to infer noise params of the target column from the main model ckpt and train the y_only model with those params
-            from tabdiff.models.noise_schedule import PowerMeanNoise_PerColumn, LogLinearNoise_PerColumn
+            from synthius.TabDiff.tabdiff.models.noise_schedule import PowerMeanNoise_PerColumn, LogLinearNoise_PerColumn
             if info['task_type'] == 'regression':
                 noise_schedule = PowerMeanNoise_PerColumn(
                     num_numerical=main_model_configs['unimodmlp_params']['d_numerical'], 
@@ -212,6 +215,7 @@ def main(args):
     if not args.y_only and not args.non_learnable_schedule:
         raw_config['diffusion_params']['scheduler'] = 'power_mean_per_column'
         raw_config['diffusion_params']['cat_scheduler'] = 'log_linear_per_column'
+    print(categories)
     diffusion = UnifiedCtimeDiffusion(
         num_classes=categories,
         num_numerical_features=d_numerical,
@@ -255,7 +259,8 @@ def main(args):
         result_save_path=raw_config['result_save_path'],
         device=device,
         ckpt_path=ckpt_path,
-        y_only=args.y_only
+        y_only=args.y_only,
+        id_col=info["id_col"]
     )
     if args.mode == 'test':
         if args.report:

@@ -29,11 +29,27 @@ TensorDict = Dict[str, torch.Tensor]
 CAT_MISSING_VALUE = 'nan'
 CAT_RARE_VALUE = '__rare__'
 Normalization = Literal['standard', 'quantile', 'minmax']
-NumNanPolicy = Literal['drop-rows', 'mean']
+NumNanPolicy = Literal['drop-rows', 'mean', 'median']
 CatNanPolicy = Literal['most_frequent']
 CatEncoding = Literal['one-hot', 'counter']
 YPolicy = Literal['default']
 DEQUANT_DIST = Literal['uniform', 'beta', 'round', 'none']
+
+
+@dataclass(frozen=True)
+class Transformations:
+    seed: int = 0
+    normalization: Optional[Normalization] = None
+    num_nan_policy: Optional[NumNanPolicy] = None
+    cat_nan_policy: Optional[CatNanPolicy] = None
+    cat_min_frequency: Optional[float] = None
+    cat_encoding: Optional[CatEncoding] = None
+    y_policy: Optional[YPolicy] = 'default'
+    dequant_dist: Optional[DEQUANT_DIST] = None
+    int_dequant_factor: Optional[float] = 0.0
+    num_nan_cols: Optional[dict] = None  # numerical columns with NaN values
+    cat_nan_cols: Optional[dict] = None  # categorical columns with NaN values
+
 
 
 class StandardScaler1d(StandardScaler):
@@ -64,6 +80,8 @@ class Dataset:
     y_info: Dict[str, Any]
     task_type: TaskType
     n_classes: Optional[int]
+    num_nan_cols: Optional[dict]
+    cat_nan_cols: Optional[dict]
 
     @classmethod
     def from_dir(cls, dir_: Union[Path, str]) -> 'Dataset':
@@ -174,7 +192,7 @@ def change_val(dataset: Dataset, val_size: float = 0.2):
 
     return dataset
 
-def num_process_nans(dataset: Dataset, policy: Optional[NumNanPolicy]) -> Dataset:
+def num_process_nans(dataset: Dataset, tr: Transformations) -> Dataset:
 
     assert dataset.X_num is not None
     nan_masks = {k: np.isnan(v) for k, v in dataset.X_num.items()}
@@ -183,8 +201,8 @@ def num_process_nans(dataset: Dataset, policy: Optional[NumNanPolicy]) -> Datase
         print('No NaNs in numerical features, skipping')
         return dataset
 
-    assert policy is not None
-    if policy == 'drop-rows':
+    assert tr.num_nan_policy is not None
+    if tr.num_nan_policy == 'drop-rows':
         valid_masks = {k: ~v.any(1) for k, v in nan_masks.items()}
         assert valid_masks[
             'test'
@@ -197,15 +215,24 @@ def num_process_nans(dataset: Dataset, policy: Optional[NumNanPolicy]) -> Datase
                     k: v[valid_masks[k]] for k, v in data_dict.items()
                 }
         dataset = replace(dataset, **new_data)
-    elif policy == 'mean':
+    elif tr.num_nan_policy == 'mean' or tr.num_nan_policy == "median":
         new_values = np.nanmean(dataset.X_num['train'], axis=0)
+        if tr.num_nan_policy == "median":
+            new_values = np.nanmedian(dataset.X_num['train'], axis=0)
         X_num = deepcopy(dataset.X_num)
         for k, v in X_num.items():
             num_nan_indices = np.where(nan_masks[k])
             v[num_nan_indices] = np.take(new_values, num_nan_indices[1])
+
+            # filled_value = prop["filled_value"]
+            # missing_proportion = prop["missing_proportion"]
+
+        for i, p in enumerate(nan_masks["train"].mean(axis=0)):
+            tr.num_nan_cols[i] = {"missing_proportion": p, "filled_value": new_values[i]}
+
         dataset = replace(dataset, X_num=X_num)
     else:
-        assert util.raise_unknown('policy', policy)
+        assert util.raise_unknown('policy', tr.num_nan_policy)
     return dataset
 
 
@@ -278,20 +305,26 @@ class dequantizer:
     #     return {k: transform(v) for k, v in X.items()}, inverse_transform
     # return {k: transform(v) for k, v in X.items()}
 
-def cat_process_nans(X: ArrayDict, policy: Optional[CatNanPolicy]) -> ArrayDict:
+def cat_process_nans(X: ArrayDict, tr: Transformations) -> ArrayDict:
     assert X is not None
-    nan_masks = {k: v == CAT_MISSING_VALUE for k, v in X.items()}
+    nan_masks = {k: ((v == CAT_MISSING_VALUE) | (pd.isna(v))) for k, v in X.items()}
     if any(x.any() for x in nan_masks.values()):  # type: ignore[code]
-        if policy is None:
+        if tr.cat_nan_policy is None:
             X_new = X
-        elif policy == 'most_frequent':
-            imputer = SimpleImputer(missing_values=CAT_MISSING_VALUE, strategy=policy)  # type: ignore[code]
+        elif tr.cat_nan_policy == 'most_frequent':
+            imputer = SimpleImputer(missing_values=np.nan, strategy=tr.cat_nan_policy)  # type: ignore[code]
             imputer.fit(X['train'])
             X_new = {k: cast(np.ndarray, imputer.transform(v)) for k, v in X.items()}
+
+            # breakpoint()
+            for i, p in enumerate(nan_masks["train"].mean(axis=0)[1:]): # skip the first column as it's the target
+                tr.cat_nan_cols[i] = {"missing_proportion": p, "filled_value": imputer.statistics_[i]}
+            # breakpoint()
+
         else:
-            util.raise_unknown('categorical NaN policy', policy)
+            util.raise_unknown('categorical NaN policy', tr.cat_nan_policy)
     else:
-        assert policy is None
+        # assert tr.cat_nan_policy is None
         X_new = X
     return X_new
 
@@ -392,19 +425,6 @@ def build_target(
     return y, info
 
 
-@dataclass(frozen=True)
-class Transformations:
-    seed: int = 0
-    normalization: Optional[Normalization] = None
-    num_nan_policy: Optional[NumNanPolicy] = None
-    cat_nan_policy: Optional[CatNanPolicy] = None
-    cat_min_frequency: Optional[float] = None
-    cat_encoding: Optional[CatEncoding] = None
-    y_policy: Optional[YPolicy] = 'default'
-    dequant_dist: Optional[DEQUANT_DIST] = None
-    int_dequant_factor: Optional[float] = 0.0
-
-
 def transform_dataset(
     dataset: Dataset,
     transformations: Transformations,
@@ -434,7 +454,7 @@ def transform_dataset(
         cache_path = None
 
     if dataset.X_num is not None:
-        dataset = num_process_nans(dataset, transformations.num_nan_policy)
+        dataset = num_process_nans(dataset, transformations)
 
     num_transform = None
     int_transform = None
@@ -475,7 +495,8 @@ def transform_dataset(
             for split in X_cat.keys():   # a patch to make sure that the empty array is transformed into int dtype
                 X_cat[split] = X_cat[split].astype(np.int64)
         else:
-            X_cat = cat_process_nans(dataset.X_cat, transformations.cat_nan_policy)
+            # breakpoint()
+            X_cat = cat_process_nans(dataset.X_cat, transformations)
     
             if transformations.cat_min_frequency is not None:
                 X_cat = cat_drop_rare(X_cat, transformations.cat_min_frequency)
@@ -495,13 +516,16 @@ def transform_dataset(
                 )
                 X_cat = None
 
-        
+    # breakpoint()
     y, y_info = build_target(dataset.y, transformations.y_policy, dataset.task_type)
 
     dataset = replace(dataset, X_num=X_num, X_cat=X_cat, y=y, y_info=y_info)
     dataset.num_transform = num_transform
     dataset.int_transform = int_transform
     dataset.cat_transform = cat_transform
+
+    dataset.num_nan_cols = transformations.num_nan_cols
+    dataset.cat_nan_cols = transformations.cat_nan_cols
 
     if cache_path is not None:
         util.dump_pickle((transformations, dataset), cache_path)

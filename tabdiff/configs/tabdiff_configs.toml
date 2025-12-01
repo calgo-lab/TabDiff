@@ -1,5 +1,5 @@
 [data]
-dequant_dist = "none"
+dequant_dist = "round"
 int_dequant_factor = 0
 
 [unimodmlp_params]
@@ -42,18 +42,19 @@ k_init=-6.0
 k_offset=1.0
 
 [train.main]
-steps = 8000
+steps = 2
 lr = 0.001
 weight_decay = 0
 ema_decay = 0.997
-batch_size = 4096
-check_val_every = 2000
+batch_size = 2048
+check_val_every = 1
 lr_scheduler = "reduce_lr_on_plateau"
 factor = 0.90           # hyperparam for reduce_lr_on_plateau
 reduce_lr_patience = 50        # hyperparam for reduce_lr_on_plateau
 closs_weight_schedule = "anneal"
 c_lambda = 1.0
 d_lambda = 1.0
+num_workers = 4
 
 [sample]
-batch_size = 10000
+batch_size = 2048

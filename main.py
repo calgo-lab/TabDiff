@@ -1,5 +1,5 @@
 import torch
-from tabdiff.main import main as tabdiff_main
+from synthius.TabDiff.tabdiff.main import main as tabdiff_main
 import argparse
 
 if __name__ == '__main__':
@@ -11,10 +11,12 @@ if __name__ == '__main__':
     parser.add_argument('--method', type=str, default='tabdiff', help='Currently we only release our model TabDiff. Baselines will be released soon.')
     parser.add_argument('--gpu', type=int, default=0, help='GPU index')
     parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
     parser.add_argument('--no_wandb', action='store_true', help='disable wandb')
     parser.add_argument('--exp_name', type=str, default=None, help='Experiment name, used to name log directories and the wandb run name')
     parser.add_argument('--deterministic', action='store_true', help='Whether to make the entire process deterministic, i.e., fix global random seeds')
     
+
     # Configs for tabdiff
     parser.add_argument('--y_only', action='store_true', help='Train guidance model that only model the target column')
     parser.add_argument('--non_learnable_schedule', action='store_true', help='disable learnable noise schedule')
@@ -34,6 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--y_only_model_path', type=str, default=None, help="Path to the y_only model checkpoint that will be used as the unconditional guidance model")
     parser.add_argument('--w_num', type=float, default=0.6)
     parser.add_argument('--w_cat', type=float, default=0.6)
+    # parser.add_argument('--process_data', action='store_true', help="Process data before training") # to use synth processing
 
     args = parser.parse_args()
 

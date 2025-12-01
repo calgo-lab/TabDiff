@@ -2,7 +2,7 @@ import torch.nn.functional as F
 import torch
 import math
 import numpy as np
-from tabdiff.models.noise_schedule import *
+from synthius.TabDiff.tabdiff.models.noise_schedule import *
 from tqdm import tqdm
 from itertools import chain
 
@@ -41,6 +41,7 @@ class UnifiedCtimeDiffusion(torch.nn.Module):
         self.num_classes_expanded = torch.from_numpy(
             np.concatenate([num_classes[i].repeat(num_classes[i]) for i in range(len(num_classes))])
         ).to(device) if len(num_classes)>0 else torch.tensor([]).to(device).int()
+        print(self.num_classes_expanded)
         self.mask_index = torch.tensor(self.num_classes).long().to(device)
         self.neg_infinity = -1000000.0 
         self.num_classes_w_mask = tuple(self.num_classes + 1)
