@@ -7,43 +7,16 @@ DATA_INFO_PATH = Path("data/Info/")
 
 
 ID_COLS = {
-    "EGZB": "aufnahmenummer_hash",
-    "charite": "id",
     "MIMIC": "subject_id"
 }
 
 
 DATASETS = {
-    # "EGZB": {
-    #     "data_path": Path("data/EGZB/"),
-    #     "task": "binclass",
-    #     "label": "fall"
-    # },
-    "charite": {
-        "data_path": Path("data/charite/"),
+    "MIMIC": {
+        "data_path": Path("data/MIMIC/"),
         "task": "binclass",
-        "label": "fallen"
+        "label": "fall"
     },
-    # "adult": {
-    #     "data_path": Path("data/adult/"),
-    #     "task": "binclass",
-    #     "label": "Income",  # pos label = >50K
-    # },
-    # "MIMIC": {
-    #     "data_path": Path("data/MIMIC/"),
-    #     "task": "binclass",
-    #     "label": "fall"
-    # },
-    # "AIDS": {
-    #     "data_path": Path("data/AIDS"),
-    #     "task": "binclass",
-    #     "label": "infected"  # pos label = Yes
-    # },
-    # "diabetes": {
-    #     "data_path": Path("data/diabetes/"),
-    #     "task": "binclass",
-    #     "label": "Diabetes"
-    # }
 }
 
 CONFIG = {
